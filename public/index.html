@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medical Research Intelligence API - Demo</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .hero {
+            text-align: center;
+            color: white;
+            margin-bottom: 3rem;
+        }
+        
+        .hero h1 {
+            font-size: 3rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .hero p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            margin-bottom: 2rem;
+        }
+        
+        .demo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+        
+        .demo-card {
+            background: white;
+            border-radius: 16px;
+            padding: 2rem;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+        }
+        
+        .demo-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 48px rgba(0,0,0,0.15);
+        }
+        
+        .demo-card h3 {
+            color: #4F46E5;
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .demo-card .icon {
+            font-size: 1.8rem;
+        }
+        
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #374151;
+        }
+        
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid #E5E7EB;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+        
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: #4F46E5;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(79, 70, 229, 0.3);
+        }
+        
+        .btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .results {
+            background: #F8FAFC;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Monaco', monospace;
+            font-size: 0.875rem;
+            border: 1px solid #E2E8F0;
+        }
+        
+        .results.loading {
+            text-align: center;
+            color: #6B7280;
+        }
+        
+        .api-info {
+            background: white;
+            border-radius: 16px;
+            padding: 2rem;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            color: #374151;
+        }
+        
+        .api-info h2 {
+            color: #1F2937;
+            margin-bottom: 1rem;
+        }
+        
+        .endpoint {
+            background: #F1F5F9;
+            border-radius: 6px;
+            padding: 0.5rem;
+            font-family: monospace;
+            margin: 0.5rem 0;
+            border-left: 4px solid #4F46E5;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+        
+        .stat-card {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            color: white;
+        }
+        
+        .stat-number {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-label {
+            opacity: 0.9;
+            font-size: 0.9rem;
+        }
+        
+        .github-link {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 8px;
+            padding: 0.5rem 1rem;
+            color: white;
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+        
+        .github-link:hover {
+            background: rgba(255,255,255,0.2);
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body>
+    <a href="https://github.com/eugenezhou/medical-research-mcp-suite" class="github-link" target="_blank">
+        ⭐ Star on GitHub
+    </a>
+
+    <div class="container">
+        <div class="hero">
+            <h1>🏥 Medical Research Intelligence</h1>
+            <p>AI-Enhanced Medical Research API combining ClinicalTrials.gov, PubMed, and FDA databases</p>
+            
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-number">400K+</div>
+                    <div class="stat-label">Clinical Trials</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">35M+</div>
+                    <div class="stat-label">Research Papers</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">80K+</div>
+                    <div class="stat-label">FDA Products</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">Real-time</div>
+                    <div class="stat-label">Live Data</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="demo-grid">
+            <div class="demo-card">
+                <h3><span class="icon">🔬</span>Clinical Trials Search</h3>
+                <form id="trialsForm">
+                    <div class="form-group">
+                        <label>Medical Condition</label>
+                        <input type="text" id="condition" placeholder="diabetes, cancer, covid..." value="diabetes">
+                    </div>
+                    <div class="form-group">
+                        <label>Drug/Intervention</label>
+                        <input type="text" id="intervention" placeholder="metformin, pembrolizumab..." value="metformin">
+                    </div>
+                    <div class="form-group">
+                        <label>Number of Results</label>
+                        <select id="pageSize">
+                            <option value="5">5 studies</option>
+                            <option value="10" selected>10 studies</option>
+                            <option value="20">20 studies</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn">Search Clinical Trials</button>
+                </form>
+                <div id="trialsResults" class="results" style="display: none;"></div>
+            </div>
+
+            <div class="demo-card">
+                <h3><span class="icon">💊</span>FDA Drug Database</h3>
+                <form id="fdaForm">
+                    <div class="form-group">
+                        <label>Drug Name</label>
+                        <input type="text" id="drugName" placeholder="metformin, insulin..." value="metformin">
+                    </div>
+                    <div class="form-group">
+                        <label>Results Limit</label>
+                        <select id="fdaLimit">
+                            <option value="10">10 products</option>
+                            <option value="20" selected>20 products</option>
+                            <option value="50">50 products</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn">Search FDA Database</button>
+                </form>
+                <div id="fdaResults" class="results" style="display: none;"></div>
+            </div>
+
+            <div class="demo-card">
+                <h3><span class="icon">🎯</span>Comprehensive Analysis</h3>
+                <form id="analysisForm">
+                    <div class="form-group">
+                        <label>Drug Name</label>
+                        <input type="text" id="analysisDrug" placeholder="pembrolizumab, metformin..." value="metformin">
+                    </div>
+                    <div class="form-group">
+                        <label>Medical Condition</label>
+                        <input type="text" id="analysisCondition" placeholder="diabetes, lung cancer..." value="diabetes">
+                    </div>
+                    <div class="form-group">
+                        <label>Analysis Depth</label>
+                        <select id="analysisDepth">
+                            <option value="basic">Basic</option>
+                            <option value="detailed" selected>Detailed</option>
+                            <option value="comprehensive">Comprehensive</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn">🔥 Cross-API Analysis</button>
+                </form>
+                <div id="analysisResults" class="results" style="display: none;"></div>
+            </div>
+
+            <div class="demo-card">
+                <h3><span class="icon">🛡️</span>Drug Safety Profile</h3>
+                <form id="safetyForm">
+                    <div class="form-group">
+                        <label>Drug Name</label>
+                        <input type="text" id="safetyDrug" placeholder="metformin, aspirin..." value="metformin">
+                    </div>
+                    <div class="form-group">
+                        <label>Analysis Timeframe</label>
+                        <select id="timeframe">
+                            <option value="1year">1 Year</option>
+                            <option value="2years">2 Years</option>
+                            <option value="5years" selected>5 Years</option>
+                            <option value="all">All Available</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn">Generate Safety Profile</button>
+                </form>
+                <div id="safetyResults" class="results" style="display: none;"></div>
+            </div>
+        </div>
+
+        <div class="api-info">
+            <h2>🚀 API Information</h2>
+            <p>Base URL: <strong id="baseUrl">Detecting...</strong></p>
+            
+            <h3>Available Endpoints:</h3>
+            <div class="endpoint">POST /api/trials/search</div>
+            <div class="endpoint">POST /api/fda/drugs</div>
+            <div class="endpoint">POST /api/analysis/comprehensive</div>
+            <div class="endpoint">POST /api/analysis/safety</div>
+            
+            <p style="margin-top: 1rem;">
+                <strong>Features:</strong> Real-time data • Cross-database analysis • AI-enhanced insights • 
+                Risk assessment • Competitive intelligence • Strategic recommendations
+            </p>
+            
+            <p style="margin-top: 1rem;">
+                <strong>Repository:</strong> <a href="https://github.com/eugenezhou/medical-research-mcp-suite" target="_blank">GitHub</a> • 
+                <strong>Documentation:</strong> <a href="https://github.com/eugenezhou/medical-research-mcp-suite/blob/main/docs/api-reference.md" target="_blank">API Reference</a> • 
+                <strong>Deployment:</strong> <a href="https://github.com/eugenezhou/medical-research-mcp-suite/blob/main/docs/deployment.md" target="_blank">Deploy Guide</a>
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // Detect current URL for API base
+        const API_BASE_URL = window.location.origin;
+        document.getElementById('baseUrl').textContent = API_BASE_URL;
+
+        async function makeAPICall(endpoint, data, resultsElementId, buttonElement) {
+            const resultsElement = document.getElementById(resultsElementId);
+            resultsElement.style.display = 'block';
+            resultsElement.innerHTML = '<div class="loading">🔄 Loading...</div>';
+            
+            // Disable button during request
+            buttonElement.disabled = true;
+            const originalText = buttonElement.textContent;
+            buttonElement.textContent = 'Loading...';
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    resultsElement.innerHTML = '<pre>' + JSON.stringify(result, null, 2) + '</pre>';
+                } else {
+                    resultsElement.innerHTML = `<div style="color: red;">Error: ${result.error}</div>`;
+                }
+            } catch (error) {
+                resultsElement.innerHTML = `<div style="color: red;">Network Error: ${error.message}</div>`;
+            } finally {
+                // Re-enable button
+                buttonElement.disabled = false;
+                buttonElement.textContent = originalText;
+            }
+        }
+
+        // Clinical Trials Form
+        document.getElementById('trialsForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const data = {
+                condition: document.getElementById('condition').value,
+                intervention: document.getElementById('intervention').value,
+                pageSize: parseInt(document.getElementById('pageSize').value)
+            };
+            makeAPICall('/api/trials/search', data, 'trialsResults', e.target.querySelector('button'));
+        });
+
+        // FDA Form
+        document.getElementById('fdaForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const data = {
+                drugName: document.getElementById('drugName').value,
+                limit: parseInt(document.getElementById('fdaLimit').value)
+            };
+            makeAPICall('/api/fda/drugs', data, 'fdaResults', e.target.querySelector('button'));
+        });
+
+        // Analysis Form
+        document.getElementById('analysisForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const data = {
+                drugName: document.getElementById('analysisDrug').value,
+                condition: document.getElementById('analysisCondition').value,
+                analysisDepth: document.getElementById('analysisDepth').value
+            };
+            makeAPICall('/api/analysis/comprehensive', data, 'analysisResults', e.target.querySelector('button'));
+        });
+
+        // Safety Profile Form
+        document.getElementById('safetyForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const data = {
+                drugName: document.getElementById('safetyDrug').value,
+                timeframe: document.getElementById('timeframe').value,
+                includeTrials: true,
+                includeFDA: true
+            };
+            makeAPICall('/api/analysis/safety', data, 'safetyResults', e.target.querySelector('button'));
+        });
+
+        // Auto-detect if API is running
+        fetch(`${API_BASE_URL}/api/status`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'healthy') {
+                    console.log('✅ API is healthy and ready!');
+                }
+            })
+            .catch(() => {
+                console.log('⚠️ API not detected. Make sure the server is running.');
+            });
+    </script>
+</body>
+</html>

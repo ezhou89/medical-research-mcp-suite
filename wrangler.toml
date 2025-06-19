@@ -1,0 +1,36 @@
+# wrangler.toml - Cloudflare Workers configuration
+
+name = "medical-research-api"
+main = "src/cloudflare-worker.ts"
+compatibility_date = "2023-12-01"
+
+[env.production]
+name = "medical-research-api-prod"
+
+[env.staging] 
+name = "medical-research-api-staging"
+
+# Environment variables
+[vars]
+NODE_ENV = "production"
+API_VERSION = "1.0.0"
+
+# Secrets (set via wrangler secret put)
+# PUBMED_API_KEY = "your_pubmed_api_key"
+# FDA_API_KEY = "your_fda_api_key"
+
+# Rate limiting
+[limits]
+# 100 requests per minute per IP
+cpu_ms = 30000
+
+# Custom domains (optional)
+# [[route]]
+# pattern = "api.yourcompany.com/*"
+# zone_name = "yourcompany.com"
+
+# KV storage for caching (optional)
+# [[kv_namespaces]]
+# binding = "CACHE"
+# id = "your_kv_namespace_id"
+# preview_id = "your_preview_kv_namespace_id"
