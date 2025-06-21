@@ -310,11 +310,15 @@ export class PubMedClient {
     
     // Extract publication types
     const publicationTypeList = medlineCitation.Article?.PublicationTypeList?.PublicationType || [];
-    const publicationType = publicationTypeList.map((type: any) => type._ || type);
+    const publicationType = Array.isArray(publicationTypeList) 
+      ? publicationTypeList.map((type: any) => type._ || type)
+      : [];
     
     // Extract keywords
     const keywordList = medlineCitation.KeywordList?.[0]?.Keyword || [];
-    const keywords = keywordList.map((keyword: any) => keyword._ || keyword);
+    const keywords = Array.isArray(keywordList)
+      ? keywordList.map((keyword: any) => keyword._ || keyword)
+      : [];
 
     return {
       pmid,

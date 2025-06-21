@@ -1,6 +1,9 @@
 // src/apis/clinicalTrials.ts
 
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import { queryEnhancer, EnhancedQuery, QueryContext } from '../utils/query-enhancer.js';
+import { relevanceScorer, ScoredStudy, ScoringContext } from '../utils/relevance-scorer.js';
+import { drugKnowledgeGraph } from '../utils/drug-knowledge-graph.js';
 
 export interface StudySearchParams {
   query?: {
@@ -290,5 +293,253 @@ export class ClinicalTrialsClient {
 
   clearCache(): void {
     this.cache.clear();
+  }
+
+  // Enhanced search methods using intelligent query enhancement and relevance scoring
+  async searchStudiesEnhanced(params: StudySearchParams, context?: QueryContext): Promise<{
+    studies: ScoredStudy[];
+    totalCount: number;
+    nextPageToken?: string;
+    queryInfo: EnhancedQuery;
+  }> {
+    // Enhance the query using intelligent expansion
+    const enhancedQuery = queryEnhancer.enhanceQuery(params, context);
+    
+    // Search using enhanced parameters
+    const searchResponse = await this.searchStudies(enhancedQuery.enhancedQuery);
+    
+    // Score results for relevance
+    const scoringContext: ScoringContext = {
+      primaryDrug: params.query?.intervention,
+      primaryIndication: params.query?.condition,
+      intent: context?.intent || 'general'
+    };
+    
+    const scoredStudies = relevanceScorer.scoreStudies(searchResponse.studies, scoringContext);
+    
+    return {
+      studies: scoredStudies,
+      totalCount: searchResponse.totalCount,
+      nextPageToken: searchResponse.nextPageToken,
+      queryInfo: enhancedQuery
+    };
+  }
+
+  async getCompetitiveLandscape(drug: string, indication?: string, maxResults: number = 100): Promise<{
+    primaryDrug: ScoredStudy[];
+    competitors: { [drugName: string]: ScoredStudy[] };
+    marketOverview: {
+      totalStudies: number;
+      activeStudies: number;
+      phaseDistribution: { [phase: string]: number };
+      topSponsors: { [sponsor: string]: number };
+    };
+    insights: string[];
+  }> {
+    const results = {
+      primaryDrug: [] as ScoredStudy[],
+      competitors: {} as { [drugName: string]: ScoredStudy[] },
+      marketOverview: {
+        totalStudies: 0,
+        activeStudies: 0,
+        phaseDistribution: {} as { [phase: string]: number },
+        topSponsors: {} as { [sponsor: string]: number }
+      },
+      insights: [] as string[]
+    };
+
+    // Search for primary drug
+    const primaryParams: StudySearchParams = {
+      query: { intervention: drug, condition: indication },
+      pageSize: 50
+    };
+    
+    const primaryResponse = await this.searchStudiesEnhanced(primaryParams, {
+      intent: 'competitive_analysis',
+      timeHorizon: 'current',
+      stakeholder: 'pharma_company'
+    });
+    
+    results.primaryDrug = primaryResponse.studies.slice(0, maxResults / 4);
+    
+    // Get competitors and search for each
+    const competitors = drugKnowledgeGraph.getCompetitors(drug, indication);
+    
+    for (const competitor of competitors.slice(0, 5)) { // Limit to top 5 competitors
+      const competitorParams: StudySearchParams = {
+        query: { intervention: competitor, condition: indication },
+        pageSize: 30
+      };
+      
+      const competitorResponse = await this.searchStudiesEnhanced(competitorParams, {
+        intent: 'competitive_analysis',
+        timeHorizon: 'current',
+        stakeholder: 'pharma_company'
+      });
+      
+      results.competitors[competitor] = competitorResponse.studies.slice(0, 20);
+    }
+    
+    // Calculate market overview
+    const allStudies = [
+      ...results.primaryDrug,
+      ...Object.values(results.competitors).flat()
+    ];
+    
+    results.marketOverview.totalStudies = allStudies.length;
+    results.marketOverview.activeStudies = allStudies.filter(s => 
+      ['RECRUITING', 'ACTIVE_NOT_RECRUITING'].includes(s.study.protocolSection.statusModule.overallStatus)
+    ).length;
+    
+    // Phase distribution
+    allStudies.forEach(s => {
+      const phases = s.study.protocolSection.designModule?.phases || ['UNKNOWN'];
+      phases.forEach(phase => {
+        results.marketOverview.phaseDistribution[phase] = 
+          (results.marketOverview.phaseDistribution[phase] || 0) + 1;
+      });
+    });
+    
+    // Top sponsors
+    allStudies.forEach(s => {
+      const sponsor = s.study.protocolSection.sponsorCollaboratorsModule?.leadSponsor?.name || 'Unknown';
+      results.marketOverview.topSponsors[sponsor] = 
+        (results.marketOverview.topSponsors[sponsor] || 0) + 1;
+    });
+    
+    // Generate insights
+    results.insights = this.generateCompetitiveInsights(results, drug);
+    
+    return results;
+  }
+
+  async getProgressiveSearchResults(params: StudySearchParams, context?: QueryContext): Promise<{
+    immediate: ScoredStudy[];
+    expanded: ScoredStudy[];
+    competitive: ScoredStudy[];
+    hasMore: boolean;
+    totalFound: number;
+  }> {
+    const strategies = queryEnhancer.generateSearchStrategies(params);
+    const results = {
+      immediate: [] as ScoredStudy[],
+      expanded: [] as ScoredStudy[],
+      competitive: [] as ScoredStudy[],
+      hasMore: false,
+      totalFound: 0
+    };
+    
+    const scoringContext: ScoringContext = {
+      primaryDrug: params.query?.intervention,
+      primaryIndication: params.query?.condition,
+      intent: context?.intent || 'competitive_analysis'
+    };
+    
+    // Execute search strategies with size limits to prevent 1MB response
+    for (const strategy of strategies.slice(0, 3)) { // Limit to 3 strategies
+      const limitedQuery = {
+        ...strategy.enhancedQuery,
+        pageSize: 15 // Small page size to control response size
+      };
+      
+      try {
+        const response = await this.searchStudies(limitedQuery);
+        const scored = relevanceScorer.scoreStudies(response.studies, scoringContext);
+        
+        // Categorize results based on strategy
+        switch (strategy.searchStrategy) {
+          case 'exact':
+          case 'expanded':
+            results.immediate.push(...scored.slice(0, 10));
+            break;
+          case 'competitive':
+            results.competitive.push(...scored.slice(0, 10));
+            break;
+          default:
+            results.expanded.push(...scored.slice(0, 10));
+        }
+        
+        results.totalFound += response.totalCount;
+        results.hasMore = results.hasMore || !!response.nextPageToken;
+        
+      } catch (error) {
+        console.warn(`Strategy ${strategy.searchStrategy} failed:`, error);
+      }
+    }
+    
+    // Deduplicate and sort by relevance
+    const seenIds = new Set<string>();
+    
+    results.immediate = results.immediate
+      .filter(s => {
+        const id = s.study.protocolSection.identificationModule.nctId;
+        if (seenIds.has(id)) return false;
+        seenIds.add(id);
+        return true;
+      })
+      .sort((a, b) => b.relevanceScore.score - a.relevanceScore.score)
+      .slice(0, 15);
+    
+    results.expanded = results.expanded
+      .filter(s => {
+        const id = s.study.protocolSection.identificationModule.nctId;
+        if (seenIds.has(id)) return false;
+        seenIds.add(id);
+        return true;
+      })
+      .sort((a, b) => b.relevanceScore.score - a.relevanceScore.score)
+      .slice(0, 10);
+    
+    results.competitive = results.competitive
+      .filter(s => {
+        const id = s.study.protocolSection.identificationModule.nctId;
+        if (seenIds.has(id)) return false;
+        seenIds.add(id);
+        return true;
+      })
+      .sort((a, b) => b.relevanceScore.score - a.relevanceScore.score)
+      .slice(0, 10);
+    
+    return results;
+  }
+
+  private generateCompetitiveInsights(landscape: any, primaryDrug: string): string[] {
+    const insights: string[] = [];
+    
+    // Market activity insight
+    const totalStudies = landscape.marketOverview.totalStudies;
+    const activeStudies = landscape.marketOverview.activeStudies;
+    const activityRate = totalStudies > 0 ? (activeStudies / totalStudies * 100).toFixed(1) : '0';
+    
+    insights.push(`Market shows ${activityRate}% active development (${activeStudies}/${totalStudies} studies)`);
+    
+    // Phase distribution insight
+    const phases = landscape.marketOverview.phaseDistribution;
+    const phase3Studies = phases['PHASE3'] || 0;
+    const phase2Studies = phases['PHASE2'] || 0;
+    
+    if (phase3Studies > phase2Studies) {
+      insights.push(`Late-stage development dominates with ${phase3Studies} Phase 3 studies vs ${phase2Studies} Phase 2`);
+    } else if (phase2Studies > phase3Studies * 2) {
+      insights.push(`Early-stage pipeline is active with ${phase2Studies} Phase 2 studies`);
+    }
+    
+    // Competitive landscape insight
+    const competitorCount = Object.keys(landscape.competitors).length;
+    const competitorStudies = Object.values(landscape.competitors).flat().length;
+    
+    if (competitorStudies > landscape.primaryDrug.length) {
+      insights.push(`Competitive pressure is high: ${competitorCount} competitors with ${competitorStudies} studies vs ${landscape.primaryDrug.length} for ${primaryDrug}`);
+    }
+    
+    // Sponsor concentration insight
+    const sponsors = landscape.marketOverview.topSponsors;
+    const topSponsor = Object.entries(sponsors).sort(([,a], [,b]) => (b as number) - (a as number))[0];
+    
+    if (topSponsor && (topSponsor[1] as number) > 3) {
+      insights.push(`${topSponsor[0]} leads development with ${topSponsor[1]} studies`);
+    }
+    
+    return insights.slice(0, 4); // Limit to 4 key insights
   }
 }
