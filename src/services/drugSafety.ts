@@ -2,30 +2,7 @@
 
 import { ClinicalTrialsClient, Study } from '../apis/clinicalTrials.js';
 import { FDAClient, FDAAdverseEvent } from '../apis/fda.js';
-// import { ProprietaryDrugSafetyAnalyzer } from '../../private/modules/drugSafetyAnalyzer.js';
-
-// Basic stub implementation
-class ProprietaryDrugSafetyAnalyzer {
-  generateComparativeAnalysis(clinicalData: any, fdaData: any) {
-    return {
-      clinicalVsRealWorld: 'Basic analysis available',
-      riskBenefitAssessment: 'Limited assessment',
-      populationSpecificRisks: []
-    };
-  }
-  
-  assessOverallRisk(clinicalData: any, fdaData: any): 'Low' | 'Medium' | 'High' | 'Unknown' {
-    return 'Medium';
-  }
-  
-  generateSafetyRecommendations(clinicalData: any, fdaData: any, riskLevel: string) {
-    return {
-      monitoringRecommendations: ['Standard monitoring protocols'],
-      contraindicationAlerts: [],
-      doseAdjustmentConsiderations: []
-    };
-  }
-}
+import { ProprietaryDrugSafetyAnalyzer } from '../../private/modules/drugSafetyAnalyzer.js';
 
 export interface DrugSafetyParams {
   drugName: string;

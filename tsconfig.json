@@ -25,9 +25,7 @@
   "exclude": [
     "node_modules",
     "dist",
-    "tests",
-    "private/**/*",
-    "src/web-server.ts"
+    "tests"
   ],
   "ts-node": {
     "esm": true
