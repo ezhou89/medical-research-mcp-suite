@@ -12,16 +12,8 @@ export class ConfigurableDrugSafetyService {
   ) {}
 
   async generateSafetyProfile(params: DrugSafetyParams): Promise<DrugSafetyProfile> {
-    try {
-      // Import proprietary analyzer if available
-      const { ProprietaryDrugSafetyAnalyzer } = await import('../../private/modules/drugSafetyAnalyzer.js');
-      const analyzer = new ProprietaryDrugSafetyAnalyzer();
-      // Use proprietary analyzer with full capabilities
-      return this.generateWithProprietaryAnalyzer(params, analyzer);
-    } catch (error) {
-      // Fall back to default implementation if private modules not available
-      return this.generateWithDefaultAnalyzer(params);
-    }
+    // Use default implementation (private modules disabled)
+    return this.generateWithDefaultAnalyzer(params);
   }
 
   private async generateWithProprietaryAnalyzer(params: DrugSafetyParams, analyzer: any): Promise<DrugSafetyProfile> {

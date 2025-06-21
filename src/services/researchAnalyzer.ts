@@ -3,7 +3,30 @@
 import { ClinicalTrialsClient, Study } from '../apis/clinicalTrials.js';
 import { PubMedClient, PubMedPaper } from '../apis/pubmed.js';
 import { FDAClient, FDADrug } from '../apis/fda.js';
-import { ProprietaryResearchAnalyzer } from '../../private/modules/researchAnalyzer.js';
+// import { ProprietaryResearchAnalyzer } from '../../private/modules/researchAnalyzer.js';
+
+// Basic stub implementation for proprietary analyzer
+class ProprietaryResearchAnalyzer {
+  generateInsights(trialAnalysis: any, literatureAnalysis: any, fdaAnalysis: any, depth: string): string[] {
+    return ['Basic analysis available', 'Contact provider for advanced insights'];
+  }
+  
+  assessRisk(trialAnalysis: any, fdaAnalysis: any) {
+    return { level: 'Medium' as const, factors: ['Limited proprietary analysis'] };
+  }
+  
+  analyzeMarket(drugName: string, condition: string, trialAnalysis: any, fdaAnalysis: any) {
+    return {
+      competitivePosition: 'Analysis unavailable',
+      marketOpportunity: 'Basic assessment only',
+      keyCompetitors: []
+    };
+  }
+  
+  generateRecommendations(insights: string[], riskProfile: any, marketAnalysis: any): string[] {
+    return ['Upgrade to advanced analysis package for detailed recommendations'];
+  }
+}
 
 export interface ResearchAnalysisParams {
   drugName: string;
