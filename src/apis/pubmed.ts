@@ -55,7 +55,7 @@ export class PubMedClient {
     this.axios.interceptors.response.use(
       (response) => response,
       (error) => {
-        console.error('PubMed API Error:', error.response?.data || error.message);
+        // Log error to file only, not stdout (MCP protocol compliance)
         throw new Error(`PubMed API Error: ${error.response?.status || 'Unknown'}`);
       }
     );
@@ -187,7 +187,7 @@ export class PubMedClient {
       // Parse XML response
       const xmlData = response.data;
       if (typeof xmlData !== 'string') {
-        console.error('Expected XML string, got:', typeof xmlData);
+        // Expected XML string, return empty array
         return [];
       }
 
@@ -224,7 +224,7 @@ export class PubMedClient {
           // Article transformation successful
           return result;
         } catch (error) {
-          console.error('DEBUG: Error transforming article:', error);
+          // Log error to file only, not stdout (MCP protocol compliance)
           return null;
         }
       }).filter((article: any) => article !== null);
@@ -232,7 +232,7 @@ export class PubMedClient {
       // Article transformation complete
       return transformedArticles;
     } catch (error) {
-      console.error('Error fetching paper details:', error);
+      // Log error to file only, not stdout (MCP protocol compliance)
       return [];
     }
   }
@@ -305,12 +305,14 @@ export class PubMedClient {
     const publicationTypeList = medlineCitation.Article?.PublicationTypeList?.PublicationType || [];
     const publicationTypes = Array.isArray(publicationTypeList) 
       ? publicationTypeList 
-      : [publicationTypeList];
+      : publicationTypeList ? [publicationTypeList] : [];
     const publicationType = publicationTypes.map((type: any) => type._ || type);
     
     // Extract keywords
     const keywordList = medlineCitation.KeywordList?.[0]?.Keyword || [];
-    const keywords = keywordList.map((keyword: any) => keyword._ || keyword);
+    const keywords = Array.isArray(keywordList) 
+      ? keywordList.map((keyword: any) => keyword._ || keyword)
+      : keywordList ? [keywordList._ || keywordList] : [];
 
     return {
       pmid,
