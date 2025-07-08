@@ -147,7 +147,7 @@ export class ClinicalTrialsClient {
     this.axios.interceptors.response.use(
       (response) => response,
       (error) => {
-        console.error('ClinicalTrials API Error:', error.response?.data || error.message);
+        // ClinicalTrials API error occurred
         throw new Error(`ClinicalTrials API Error: ${error.response?.status || 'Unknown'}`);
       }
     );
@@ -333,7 +333,7 @@ export class ClinicalTrialsClient {
           
           // Check if adding this page would exceed size limits
           if (accumulatedSize > this.sizeMonitor.getConfig().maxResponseSize) {
-            console.warn(`Accumulated response size (${this.sizeMonitor.formatSize(accumulatedSize)}) would exceed limits. Stopping pagination.`);
+            // Accumulated response size exceeds limits
             break;
           }
         }
@@ -344,14 +344,14 @@ export class ClinicalTrialsClient {
         
         // Prevent infinite loops
         if (pagesProcessed >= maxPages) {
-          console.warn(`Reached maximum page limit (${maxPages}). Stopping pagination.`);
+          // Reached maximum page limit
           break;
         }
         
       } catch (error) {
         // If we hit a size limit error during pagination, return what we have
         if (error instanceof ResponseSizeExceededError) {
-          console.warn(`Size limit reached during pagination. Returning ${allStudies.length} studies.`);
+          // Size limit reached during pagination
           break;
         }
         throw error;

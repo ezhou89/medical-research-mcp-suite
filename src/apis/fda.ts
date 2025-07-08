@@ -96,7 +96,7 @@ export class FDAClient {
     this.axios.interceptors.response.use(
       (response) => response,
       (error) => {
-        console.error('FDA API Error:', error.response?.data || error.message);
+        // FDA API error occurred
         throw new Error(`FDA API Error: ${error.response?.status || 'Unknown'}`);
       }
     );
@@ -141,7 +141,7 @@ export class FDAClient {
 
       searchQuery = searchTerms.length > 0 ? searchTerms.join('+AND+') : '*';
       
-      console.log(`FDA Search Query: ${searchQuery}`);
+      // FDA search query constructed
       
       const searchParams = new URLSearchParams();
       searchParams.append('search', searchQuery);
@@ -151,7 +151,7 @@ export class FDAClient {
         searchParams.append('api_key', this.apiKey);
       }
 
-      console.log(`FDA API URL: ${this.baseURL}/drug/drugsfda.json?${searchParams.toString()}`);
+      // FDA API request prepared
       
       const response = await this.axios.get('/drug/drugsfda.json', {
         params: searchParams,
@@ -170,7 +170,7 @@ export class FDAClient {
         const sizeCheck = this.sizeMonitor.checkSizeLimit(result, 'fda-drugs-search');
         
         if (!sizeCheck.withinLimit && sizeCheck.exceededInfo) {
-          console.warn(`FDA search result size (${this.sizeMonitor.formatSize(sizeCheck.exceededInfo.actualSize)}) exceeds limit. Consider adding filters.`);
+          // FDA search result size exceeds limit
           // Note: Unlike clinical trials, we'll allow oversized FDA results for now
           // but log a warning for future refinement implementation
         }
@@ -184,19 +184,13 @@ export class FDAClient {
 
       return result;
     } catch (error: any) {
-      console.error('FDA Search Error Details:', {
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data,
-        searchQuery,
-        originalParams: params
-      });
+      // FDA search error occurred - check logs for details
       
       // If no results found, return empty array instead of error
       if (error.response?.status === 404 || 
           (error.response?.data?.error?.code === 'NOT_FOUND') ||
           error.message.includes('NOT_FOUND')) {
-        console.log('FDA API returned 404/NOT_FOUND - no results found, returning empty array');
+        // FDA API returned no results
         return {
           drugs: [],
           totalCount: 0,
@@ -205,7 +199,7 @@ export class FDAClient {
       
       // Try alternative search strategy for any search that fails
       if (params.activeIngredient || params.drugName) {
-        console.log('Trying alternative search strategies...');
+        // Attempting alternative search strategies
         return await this.searchDrugsAlternative(params);
       }
       
@@ -214,7 +208,7 @@ export class FDAClient {
   }
 
   private async searchDrugsAlternative(params: FDADrugSearchParams): Promise<FDADrugSearchResponse> {
-    console.log('Attempting alternative FDA search strategies...');
+    // Attempting alternative FDA search strategies
     
     let alternativeStrategies: string[] = [];
     
@@ -250,7 +244,7 @@ export class FDAClient {
 
     for (const strategy of alternativeStrategies) {
       try {
-        console.log(`Trying FDA search strategy: ${strategy}`);
+        // Trying FDA search strategy
         
         const searchParams = new URLSearchParams();
         searchParams.append('search', strategy);
@@ -265,7 +259,7 @@ export class FDAClient {
         });
 
         if (response.data.results && response.data.results.length > 0) {
-          console.log(`✅ FDA Alternative search successful with strategy: ${strategy}`);
+          // FDA alternative search successful
           
           const results = response.data.results || [];
           const drugs = results.map((drug: any) => this.transformDrug(drug));
@@ -276,7 +270,7 @@ export class FDAClient {
           };
         }
       } catch (error: any) {
-        console.log(`❌ FDA Strategy failed: ${strategy} - ${error.response?.status}`);
+        // FDA strategy failed
         continue; // Try next strategy
       }
     }
@@ -284,7 +278,7 @@ export class FDAClient {
     // If all strategies fail, try a broader search
     const searchTerm = params.activeIngredient || params.drugName;
     if (searchTerm) {
-      console.log(`Trying broad text search for: ${searchTerm}...`);
+      // Trying broad text search
       try {
         const searchParams = new URLSearchParams();
         searchParams.append('search', `"${searchTerm}"`); // Simple text search
@@ -299,7 +293,7 @@ export class FDAClient {
         });
 
         if (response.data.results && response.data.results.length > 0) {
-          console.log('✅ FDA Broad text search successful');
+          // FDA broad text search successful
           
           const results = response.data.results || [];
           const drugs = results.map((drug: any) => this.transformDrug(drug));
@@ -310,11 +304,11 @@ export class FDAClient {
           };
         }
       } catch (error: any) {
-        console.log(`❌ FDA Broad search also failed: ${error.response?.status}`);
+        // FDA broad search failed
       }
     }
 
-    console.log('All FDA search strategies exhausted, returning empty results');
+    // All FDA search strategies exhausted
     return {
       drugs: [],
       totalCount: 0,
@@ -372,7 +366,7 @@ export class FDAClient {
         const sizeCheck = this.sizeMonitor.checkSizeLimit(result, 'fda-adverse-events');
         
         if (!sizeCheck.withinLimit && sizeCheck.exceededInfo) {
-          console.warn(`FDA adverse events result size (${this.sizeMonitor.formatSize(sizeCheck.exceededInfo.actualSize)}) exceeds limit. Consider reducing limit parameter.`);
+          // FDA adverse events result size exceeds limit
         }
       }
 

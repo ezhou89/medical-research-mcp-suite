@@ -3,6 +3,10 @@
 import winston from 'winston';
 import path from 'path';
 
+// Get environment configuration
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+const LOG_LEVEL = process.env.LOG_LEVEL || (IS_PRODUCTION ? 'error' : 'debug');
+
 // Define log levels
 const levels = {
   error: 0,
@@ -179,6 +183,25 @@ export const createErrorWithContext = (
     error.stack = originalError.stack;
   }
   return error;
+};
+
+// Safe debug logging for MCP server - only logs to file, never to stdout
+export const safeDebugLog = (message: string, data?: any) => {
+  if (LOG_LEVEL === 'debug' || !IS_PRODUCTION) {
+    logger.debug(message, data);
+  }
+};
+
+// Safe error logging for MCP server - only logs to file, never to stdout
+export const safeErrorLog = (message: string, error?: Error | any) => {
+  if (error instanceof Error) {
+    logger.error(message, {
+      error: error.message,
+      stack: error.stack
+    });
+  } else {
+    logger.error(message, { error });
+  }
 };
 
 export default logger;

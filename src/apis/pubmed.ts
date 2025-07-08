@@ -200,28 +200,28 @@ export class PubMedClient {
 
       // Handle different XML structures
       let articles = [];
-      console.log('DEBUG: JSON data keys:', Object.keys(jsonData));
+      // Process JSON data structure
       
       if (jsonData.PubmedArticleSet?.PubmedArticle) {
         // Standard structure with PubmedArticleSet wrapper
         articles = Array.isArray(jsonData.PubmedArticleSet.PubmedArticle) 
           ? jsonData.PubmedArticleSet.PubmedArticle 
           : [jsonData.PubmedArticleSet.PubmedArticle];
-        console.log('DEBUG: Found PubmedArticleSet structure, articles:', articles.length);
+        // Process PubmedArticleSet structure
       } else if (jsonData.PubmedArticle) {
         // Direct PubmedArticle array or single article
         articles = Array.isArray(jsonData.PubmedArticle) 
           ? jsonData.PubmedArticle 
           : [jsonData.PubmedArticle];
-        console.log('DEBUG: Found direct PubmedArticle structure, articles:', articles.length);
+        // Process direct PubmedArticle structure
       } else {
-        console.log('DEBUG: Unexpected XML structure:', Object.keys(jsonData));
+        // Handle unexpected XML structure
       }
       
       const transformedArticles = articles.map((article: any) => {
         try {
           const result = this.transformArticle(article);
-          console.log('DEBUG: Successfully transformed article with PMID:', result.pmid);
+          // Article transformation successful
           return result;
         } catch (error) {
           console.error('DEBUG: Error transforming article:', error);
@@ -229,7 +229,7 @@ export class PubMedClient {
         }
       }).filter((article: any) => article !== null);
       
-      console.log('DEBUG: Transformed articles count:', transformedArticles.length);
+      // Article transformation complete
       return transformedArticles;
     } catch (error) {
       console.error('Error fetching paper details:', error);
@@ -238,18 +238,11 @@ export class PubMedClient {
   }
 
   private transformArticle(article: any): PubMedPaper {
-    console.log('DEBUG: Transforming article:', !!article);
-    console.log('DEBUG: Article keys:', Object.keys(article || {}));
-    
     const medlineCitation = article.MedlineCitation;
     const pubmedData = article.PubmedData;
     
-    console.log('DEBUG: Has MedlineCitation:', !!medlineCitation);
-    console.log('DEBUG: Has PubmedData:', !!pubmedData);
-    
     // Handle PMID which might be an object with attributes or a simple value
     const pmid = medlineCitation?.PMID?._ || medlineCitation?.PMID || 'Unknown';
-    console.log('DEBUG: Extracted PMID:', pmid);
     
     // Extract title
     const title = medlineCitation.Article?.ArticleTitle || 'No title available';

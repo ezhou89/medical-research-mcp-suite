@@ -20,6 +20,10 @@ import { DrugSafetyService } from './services/drugSafety.js';
 
 dotenv.config();
 
+// Configure production mode logging
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+const LOG_LEVEL = process.env.LOG_LEVEL || (IS_PRODUCTION ? 'error' : 'debug');
+
 export class MedicalResearchMCPServer {
   private server: Server;
   
