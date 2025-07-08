@@ -1,6 +1,9 @@
 // src/apis/clinicalTrials.ts
 
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import { ResponseSizeMonitor } from '../utils/responseSizeMonitor.js';
+import { SearchRefinementService } from '../services/searchRefinementService.js';
+import { RefinementResponse, ResponseSizeExceededError, RefinementError } from '../types/refinementTypes.js';
 
 export interface StudySearchParams {
   query?: {
@@ -102,13 +105,35 @@ export interface SearchResponse {
   nextPageToken?: string;
 }
 
+export interface EnhancedSearchResponse extends SearchResponse {
+  sizeMetrics?: {
+    responseSize: number;
+    estimatedMemoryUsage: number;
+    truncated: boolean;
+    truncationSummary?: string;
+  };
+  refinementSuggestions?: Array<{
+    id: string;
+    label: string;
+    description: string;
+    priority: 'high' | 'medium' | 'low';
+  }>;
+}
+
 export class ClinicalTrialsClient {
   private axios: AxiosInstance;
   private readonly baseURL = 'https://clinicaltrials.gov/api/v2';
   private cache = new Map<string, { data: any; timestamp: number }>();
   private readonly cacheTimeout = 3600000; // 1 hour
+  private sizeMonitor: ResponseSizeMonitor;
+  private refinementService: SearchRefinementService;
+  private enableSizeMonitoring: boolean = true;
 
-  constructor() {
+  constructor(options: { enableSizeMonitoring?: boolean } = {}) {
+    this.enableSizeMonitoring = options.enableSizeMonitoring ?? true;
+    this.sizeMonitor = ResponseSizeMonitor.getInstance();
+    this.refinementService = SearchRefinementService.getInstance();
+    
     this.axios = axios.create({
       baseURL: this.baseURL,
       timeout: 30000,
@@ -223,6 +248,27 @@ export class ClinicalTrialsClient {
         nextPageToken: response.data.nextPageToken,
       };
 
+      // Check response size if monitoring is enabled
+      if (this.enableSizeMonitoring) {
+        const sizeCheck = this.sizeMonitor.checkSizeLimit(result, 'clinicalTrials-search');
+        
+        if (!sizeCheck.withinLimit && sizeCheck.exceededInfo) {
+          // Response is too large, throw refinement error
+          throw new ResponseSizeExceededError(
+            sizeCheck.exceededInfo.actualSize,
+            sizeCheck.exceededInfo.maxSize,
+            params,
+            'clinicalTrials',
+            this.refinementService.analyzeAndSuggestRefinements(
+              params,
+              'clinicalTrials',
+              sizeCheck.exceededInfo.actualSize,
+              sizeCheck.exceededInfo.maxSize
+            ).options
+          );
+        }
+      }
+
       // Cache the result
       this.cache.set(cacheKey, {
         data: result,
@@ -231,6 +277,10 @@ export class ClinicalTrialsClient {
 
       return result;
     } catch (error) {
+      // Check if this is a refinement error and preserve it
+      if (error instanceof ResponseSizeExceededError) {
+        throw error;
+      }
       throw new Error(`Failed to search studies: ${error}`);
     }
   }
@@ -268,24 +318,182 @@ export class ClinicalTrialsClient {
     const allStudies: Study[] = [];
     let pageToken: string | undefined = params.pageToken;
     let pagesProcessed = 0;
+    let accumulatedSize = 0;
 
     do {
       const searchParams = { ...params, pageToken };
-      const response = await this.searchStudies(searchParams);
       
-      allStudies.push(...response.studies);
-      pageToken = response.nextPageToken;
-      pagesProcessed++;
-      
-      // Prevent infinite loops
-      if (pagesProcessed >= maxPages) {
-        console.warn(`Reached maximum page limit (${maxPages}). Stopping pagination.`);
-        break;
+      try {
+        const response = await this.searchStudies(searchParams);
+        
+        // Check accumulated size if monitoring is enabled
+        if (this.enableSizeMonitoring) {
+          const newSize = this.sizeMonitor.calculateSize(response.studies);
+          accumulatedSize += newSize;
+          
+          // Check if adding this page would exceed size limits
+          if (accumulatedSize > this.sizeMonitor.getConfig().maxResponseSize) {
+            console.warn(`Accumulated response size (${this.sizeMonitor.formatSize(accumulatedSize)}) would exceed limits. Stopping pagination.`);
+            break;
+          }
+        }
+        
+        allStudies.push(...response.studies);
+        pageToken = response.nextPageToken;
+        pagesProcessed++;
+        
+        // Prevent infinite loops
+        if (pagesProcessed >= maxPages) {
+          console.warn(`Reached maximum page limit (${maxPages}). Stopping pagination.`);
+          break;
+        }
+        
+      } catch (error) {
+        // If we hit a size limit error during pagination, return what we have
+        if (error instanceof ResponseSizeExceededError) {
+          console.warn(`Size limit reached during pagination. Returning ${allStudies.length} studies.`);
+          break;
+        }
+        throw error;
       }
       
     } while (pageToken);
 
     return allStudies;
+  }
+
+  /**
+   * Search with enhanced response including size metrics and refinement suggestions
+   */
+  async searchStudiesWithRefinement(params: StudySearchParams): Promise<RefinementResponse<SearchResponse>> {
+    try {
+      const result = await this.searchStudies(params);
+      
+      // Calculate size metrics
+      const sizeCheck = this.sizeMonitor.checkSizeLimit(result, 'clinicalTrials-search');
+      
+      return {
+        success: true,
+        data: result,
+        metadata: {
+          originalSize: sizeCheck.metrics.responseSize,
+          processedSize: sizeCheck.metrics.responseSize,
+          truncated: sizeCheck.metrics.truncated,
+          processingTime: Date.now()
+        }
+      };
+    } catch (error) {
+      if (error instanceof ResponseSizeExceededError) {
+        return this.refinementService.createRefinementErrorResponse(
+          params,
+          'clinicalTrials',
+          error.refinementContext.actualSize,
+          error.refinementContext.maxAllowedSize
+        );
+      }
+      
+      // Create a proper RefinementError for non-refinement errors
+      const refinementError = error instanceof RefinementError ? error : 
+        new RefinementError(
+          error instanceof Error ? error.message : 'Unknown error occurred',
+          'SEARCH_ERROR',
+          {
+            originalQuery: params,
+            api: 'clinicalTrials',
+            errorType: 'api_error',
+            maxAllowedSize: this.sizeMonitor.getConfig().maxResponseSize,
+            actualSize: 0,
+            suggestedRefinements: []
+          },
+          false
+        );
+        
+      return {
+        success: false,
+        error: refinementError,
+        requiresUserInput: false
+      };
+    }
+  }
+
+  /**
+   * Get a sample of studies for preview purposes
+   */
+  async getStudiesSample(params: StudySearchParams, sampleSize: number = 10): Promise<SearchResponse> {
+    const sampleParams = { ...params, pageSize: sampleSize };
+    return this.searchStudies(sampleParams);
+  }
+
+  /**
+   * Progressive loading with size monitoring
+   */
+  async loadStudiesProgressively(
+    params: StudySearchParams,
+    onBatch: (studies: Study[], isLast: boolean) => void,
+    maxPages: number = 10
+  ): Promise<{ totalLoaded: number; stoppedDueToSize: boolean }> {
+    let totalLoaded = 0;
+    let pageToken: string | undefined = params.pageToken;
+    let pagesProcessed = 0;
+    let accumulatedSize = 0;
+    let stoppedDueToSize = false;
+
+    do {
+      const searchParams = { ...params, pageToken };
+      
+      try {
+        const response = await this.searchStudies(searchParams);
+        
+        // Check accumulated size
+        if (this.enableSizeMonitoring) {
+          const newSize = this.sizeMonitor.calculateSize(response.studies);
+          accumulatedSize += newSize;
+          
+          if (accumulatedSize > this.sizeMonitor.getConfig().maxResponseSize) {
+            stoppedDueToSize = true;
+            break;
+          }
+        }
+        
+        const isLast = !response.nextPageToken || pagesProcessed >= maxPages - 1;
+        onBatch(response.studies, isLast);
+        
+        totalLoaded += response.studies.length;
+        pageToken = response.nextPageToken;
+        pagesProcessed++;
+        
+      } catch (error) {
+        if (error instanceof ResponseSizeExceededError) {
+          stoppedDueToSize = true;
+          break;
+        }
+        throw error;
+      }
+      
+    } while (pageToken && pagesProcessed < maxPages);
+
+    return { totalLoaded, stoppedDueToSize };
+  }
+
+  /**
+   * Enable or disable size monitoring
+   */
+  setSizeMonitoring(enabled: boolean): void {
+    this.enableSizeMonitoring = enabled;
+  }
+
+  /**
+   * Get size monitoring configuration
+   */
+  getSizeMonitoringConfig() {
+    return this.sizeMonitor.getConfig();
+  }
+
+  /**
+   * Update size monitoring configuration
+   */
+  updateSizeMonitoringConfig(config: any): void {
+    this.sizeMonitor.updateConfig(config);
   }
 
   clearCache(): void {

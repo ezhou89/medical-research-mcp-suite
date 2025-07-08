@@ -1,6 +1,8 @@
 // src/apis/fda.ts
 
 import axios, { AxiosInstance } from 'axios';
+import { ResponseSizeMonitor } from '../utils/responseSizeMonitor.js';
+import { SearchRefinementService } from '../services/searchRefinementService.js';
 
 export interface FDADrugSearchParams {
   drugName?: string;
@@ -72,9 +74,14 @@ export class FDAClient {
   private cache = new Map<string, { data: any; timestamp: number }>();
   private readonly cacheTimeout = 3600000; // 1 hour
   private readonly apiKey?: string;
+  private sizeMonitor: ResponseSizeMonitor;
+  private refinementService: SearchRefinementService;
+  private enableSizeMonitoring: boolean = true;
 
   constructor() {
     this.apiKey = process.env.FDA_API_KEY;
+    this.sizeMonitor = ResponseSizeMonitor.getInstance();
+    this.refinementService = SearchRefinementService.getInstance();
     
     this.axios = axios.create({
       baseURL: this.baseURL,
@@ -112,23 +119,29 @@ export class FDAClient {
       return cached.data;
     }
 
+    let searchQuery = '*'; // Declare outside try block
+
     try {
       // Build search query
       const searchTerms: string[] = [];
       
       if (params.drugName) {
-        searchTerms.push(`openfda.brand_name:"${params.drugName}"+openfda.generic_name:"${params.drugName}"`);
+        // Search both brand and generic names
+        searchTerms.push(`(openfda.brand_name:"${params.drugName}"+OR+openfda.generic_name:"${params.drugName}"+OR+products.brand_name:"${params.drugName}"+OR+products.generic_name:"${params.drugName}")`);
       }
       
       if (params.activeIngredient) {
-        searchTerms.push(`active_ingredients.name:"${params.activeIngredient}"`);
+        // Try multiple field patterns for active ingredient search
+        searchTerms.push(`products.active_ingredients.name:"${params.activeIngredient}"`);
       }
       
       if (params.approvalStatus) {
         searchTerms.push(`approval_status:"${params.approvalStatus}"`);
       }
 
-      const searchQuery = searchTerms.join('+AND+') || '*';
+      searchQuery = searchTerms.length > 0 ? searchTerms.join('+AND+') : '*';
+      
+      console.log(`FDA Search Query: ${searchQuery}`);
       
       const searchParams = new URLSearchParams();
       searchParams.append('search', searchQuery);
@@ -138,6 +151,8 @@ export class FDAClient {
         searchParams.append('api_key', this.apiKey);
       }
 
+      console.log(`FDA API URL: ${this.baseURL}/drug/drugsfda.json?${searchParams.toString()}`);
+      
       const response = await this.axios.get('/drug/drugsfda.json', {
         params: searchParams,
       });
@@ -150,6 +165,17 @@ export class FDAClient {
         totalCount: response.data.meta?.results?.total || drugs.length,
       };
 
+      // Check response size if monitoring is enabled
+      if (this.enableSizeMonitoring) {
+        const sizeCheck = this.sizeMonitor.checkSizeLimit(result, 'fda-drugs-search');
+        
+        if (!sizeCheck.withinLimit && sizeCheck.exceededInfo) {
+          console.warn(`FDA search result size (${this.sizeMonitor.formatSize(sizeCheck.exceededInfo.actualSize)}) exceeds limit. Consider adding filters.`);
+          // Note: Unlike clinical trials, we'll allow oversized FDA results for now
+          // but log a warning for future refinement implementation
+        }
+      }
+
       // Cache the result
       this.cache.set(cacheKey, {
         data: result,
@@ -158,15 +184,141 @@ export class FDAClient {
 
       return result;
     } catch (error: any) {
+      console.error('FDA Search Error Details:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        searchQuery,
+        originalParams: params
+      });
+      
       // If no results found, return empty array instead of error
-      if (error.response?.status === 404) {
+      if (error.response?.status === 404 || 
+          (error.response?.data?.error?.code === 'NOT_FOUND') ||
+          error.message.includes('NOT_FOUND')) {
+        console.log('FDA API returned 404/NOT_FOUND - no results found, returning empty array');
         return {
           drugs: [],
           totalCount: 0,
         };
       }
-      throw new Error(`Failed to search FDA drugs: ${error}`);
+      
+      // Try alternative search strategy for any search that fails
+      if (params.activeIngredient || params.drugName) {
+        console.log('Trying alternative search strategies...');
+        return await this.searchDrugsAlternative(params);
+      }
+      
+      throw new Error(`Failed to search FDA drugs: ${error.response?.status} ${error.response?.statusText || error.message}`);
     }
+  }
+
+  private async searchDrugsAlternative(params: FDADrugSearchParams): Promise<FDADrugSearchResponse> {
+    console.log('Attempting alternative FDA search strategies...');
+    
+    let alternativeStrategies: string[] = [];
+    
+    // Add strategies for active ingredient search
+    if (params.activeIngredient) {
+      alternativeStrategies.push(
+        `products.active_ingredients.name.exact:"${params.activeIngredient}"`,
+        `active_ingredients.name:"${params.activeIngredient}"`,
+        `products.active_ingredient:"${params.activeIngredient}"`,
+        `active_ingredient:"${params.activeIngredient}"`,
+        // Try partial matching
+        `products.active_ingredients.name:${params.activeIngredient}*`,
+        `active_ingredients.name:${params.activeIngredient}*`,
+      );
+    }
+    
+    // Add strategies for drug name search
+    if (params.drugName) {
+      alternativeStrategies.push(
+        `products.brand_name.exact:"${params.drugName}"`,
+        `products.generic_name.exact:"${params.drugName}"`,
+        `openfda.brand_name.exact:"${params.drugName}"`,
+        `openfda.generic_name.exact:"${params.drugName}"`,
+        `brand_name:"${params.drugName}"`,
+        `generic_name:"${params.drugName}"`,
+        // Try partial matching
+        `products.brand_name:${params.drugName}*`,
+        `products.generic_name:${params.drugName}*`,
+        `openfda.brand_name:${params.drugName}*`,
+        `openfda.generic_name:${params.drugName}*`,
+      );
+    }
+
+    for (const strategy of alternativeStrategies) {
+      try {
+        console.log(`Trying FDA search strategy: ${strategy}`);
+        
+        const searchParams = new URLSearchParams();
+        searchParams.append('search', strategy);
+        searchParams.append('limit', (params.limit || 20).toString());
+        
+        if (this.apiKey) {
+          searchParams.append('api_key', this.apiKey);
+        }
+
+        const response = await this.axios.get('/drug/drugsfda.json', {
+          params: searchParams,
+        });
+
+        if (response.data.results && response.data.results.length > 0) {
+          console.log(`✅ FDA Alternative search successful with strategy: ${strategy}`);
+          
+          const results = response.data.results || [];
+          const drugs = results.map((drug: any) => this.transformDrug(drug));
+
+          return {
+            drugs,
+            totalCount: response.data.meta?.results?.total || drugs.length,
+          };
+        }
+      } catch (error: any) {
+        console.log(`❌ FDA Strategy failed: ${strategy} - ${error.response?.status}`);
+        continue; // Try next strategy
+      }
+    }
+
+    // If all strategies fail, try a broader search
+    const searchTerm = params.activeIngredient || params.drugName;
+    if (searchTerm) {
+      console.log(`Trying broad text search for: ${searchTerm}...`);
+      try {
+        const searchParams = new URLSearchParams();
+        searchParams.append('search', `"${searchTerm}"`); // Simple text search
+        searchParams.append('limit', (params.limit || 20).toString());
+        
+        if (this.apiKey) {
+          searchParams.append('api_key', this.apiKey);
+        }
+
+        const response = await this.axios.get('/drug/drugsfda.json', {
+          params: searchParams,
+        });
+
+        if (response.data.results && response.data.results.length > 0) {
+          console.log('✅ FDA Broad text search successful');
+          
+          const results = response.data.results || [];
+          const drugs = results.map((drug: any) => this.transformDrug(drug));
+
+          return {
+            drugs,
+            totalCount: response.data.meta?.results?.total || drugs.length,
+          };
+        }
+      } catch (error: any) {
+        console.log(`❌ FDA Broad search also failed: ${error.response?.status}`);
+      }
+    }
+
+    console.log('All FDA search strategies exhausted, returning empty results');
+    return {
+      drugs: [],
+      totalCount: 0,
+    };
   }
 
   async getAdverseEvents(params: FDAAdverseEventParams): Promise<FDAAdverseEventResponse> {
@@ -214,6 +366,15 @@ export class FDAClient {
         totalCount: response.data.meta?.results?.total || events.length,
         summary,
       };
+
+      // Check response size if monitoring is enabled
+      if (this.enableSizeMonitoring) {
+        const sizeCheck = this.sizeMonitor.checkSizeLimit(result, 'fda-adverse-events');
+        
+        if (!sizeCheck.withinLimit && sizeCheck.exceededInfo) {
+          console.warn(`FDA adverse events result size (${this.sizeMonitor.formatSize(sizeCheck.exceededInfo.actualSize)}) exceeds limit. Consider reducing limit parameter.`);
+        }
+      }
 
       // Cache the result
       this.cache.set(cacheKey, {
@@ -320,6 +481,27 @@ export class FDAClient {
       deaths,
       topEvents,
     };
+  }
+
+  /**
+   * Enable or disable size monitoring
+   */
+  setSizeMonitoring(enabled: boolean): void {
+    this.enableSizeMonitoring = enabled;
+  }
+
+  /**
+   * Get size monitoring configuration
+   */
+  getSizeMonitoringConfig() {
+    return this.sizeMonitor.getConfig();
+  }
+
+  /**
+   * Update size monitoring configuration
+   */
+  updateSizeMonitoringConfig(config: any): void {
+    this.sizeMonitor.updateConfig(config);
   }
 
   clearCache(): void {

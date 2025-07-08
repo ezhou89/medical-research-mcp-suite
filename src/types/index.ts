@@ -1,6 +1,7 @@
 // src/types/index.ts
 
 export * from './common.js';
+export * from './refinementTypes.js';
 
 // Re-export types from API modules
 export type { 

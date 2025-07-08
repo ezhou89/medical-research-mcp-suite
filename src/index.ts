@@ -105,6 +105,127 @@ export class MedicalResearchMCPServer {
     });
   }
 
+  // Handle prompt requests
+  private async handlePromptRequest(name: string, args: any) {
+    try {
+      switch (name) {
+        case 'search_refinement':
+          return await this.generateSearchRefinementPrompt(args);
+        case 'progressive_loading':
+          return await this.generateProgressiveLoadingPrompt(args);
+        case 'field_selection':
+          return await this.generateFieldSelectionPrompt(args);
+        default:
+          throw new Error(`Unknown prompt: ${name}`);
+      }
+    } catch (error: any) {
+      return {
+        content: [{ type: "text", text: `Error generating prompt: ${error.message}` }],
+        isError: true,
+      };
+    }
+  }
+
+  private async generateSearchRefinementPrompt(args: any) {
+    const {
+      originalQuery,
+      api,
+      errorMessage,
+      suggestedRefinements,
+      currentResultCount,
+      canContinueWithoutRefinement
+    } = args;
+
+    const refinementOptions = suggestedRefinements.map((ref: any, index: number) => 
+      `${index + 1}. **${ref.label}** (${ref.priority} priority)\\n   ${ref.description}`
+    ).join('\\n\\n');
+
+    const promptText = `# Search Results Too Large - Refinement Required
+
+**Original Query:** ${JSON.stringify(originalQuery, null, 2)}
+**API:** ${api}
+**Issue:** ${errorMessage}
+${currentResultCount ? `**Current Results:** ${currentResultCount}` : ''}
+
+## Suggested Refinements
+
+${refinementOptions}
+
+## Instructions
+
+Please select one or more refinement options by number, or provide your own refinement parameters. For example:
+- "Apply options 1 and 3"
+- "Filter to Phase III trials from last 2 years"
+- "Load first 50 results progressively"
+
+${canContinueWithoutRefinement ? '**Note:** You can also choose to continue with truncated results.' : ''}
+
+What would you like to do?`;
+
+    return {
+      content: [{
+        type: "text",
+        text: promptText,
+      }],
+    };
+  }
+
+  private async generateProgressiveLoadingPrompt(args: any) {
+    const { totalResults, pageSize, currentPage, loadingOptions } = args;
+
+    const options = loadingOptions.map((option: string, index: number) => 
+      `${index + 1}. ${option}`
+    ).join('\\n');
+
+    const promptText = `# Progressive Loading Options
+
+**Total Results Available:** ${totalResults}
+**Current Page:** ${currentPage}
+**Results per Page:** ${pageSize}
+
+## Loading Options
+
+${options}
+
+How would you like to proceed with loading the remaining results?`;
+
+    return {
+      content: [{
+        type: "text",
+        text: promptText,
+      }],
+    };
+  }
+
+  private async generateFieldSelectionPrompt(args: any) {
+    const { availableFields, currentFields, estimatedSizeReduction, fieldDescriptions } = args;
+
+    const fieldList = availableFields.map((field: string) => 
+      `- **${field}**: ${fieldDescriptions[field] || 'No description available'} ${currentFields.includes(field) ? '(currently selected)' : ''}`
+    ).join('\\n');
+
+    const promptText = `# Field Selection for Size Reduction
+
+**Estimated Size Reduction:** ${estimatedSizeReduction}%
+
+## Available Fields
+
+${fieldList}
+
+Please select which fields you'd like to include in the response to reduce the size. You can specify:
+- Field names: "id, title, status, phase"
+- Categories: "essential fields only", "basic info", "detailed info"
+
+What fields would you like to include?`;
+
+    return {
+      content: [{
+        type: "text",
+        text: promptText,
+      }],
+    };
+  }
+
   // Individual API tool definitions
   private getClinicalTrialsTools(): Tool[] {
     return [
@@ -450,13 +571,20 @@ export class MedicalResearchMCPServer {
     
     switch (toolName) {
       case 'search_trials':
-        const searchResult = await this.clinicalTrialsClient.searchStudies(args);
-        return {
-          content: [{
-            type: "text",
-            text: JSON.stringify(searchResult, null, 2),
-          }],
-        };
+        // Use the enhanced search with refinement support
+        const searchResult = await this.clinicalTrialsClient.searchStudiesWithRefinement(args);
+        
+        if (searchResult.success) {
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify(searchResult.data, null, 2),
+            }],
+          };
+        } else {
+          // Return refinement error for user interaction
+          throw searchResult.error;
+        }
       
       case 'get_study':
         const study = await this.clinicalTrialsClient.getStudyById(args.nctId);

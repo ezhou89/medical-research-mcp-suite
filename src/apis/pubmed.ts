@@ -256,14 +256,14 @@ export class PubMedClient {
     
     // Extract authors
     const authorList = medlineCitation.Article?.AuthorList?.Author || [];
-    const authors = authorList.map((author: any) => {
+    const authors = Array.isArray(authorList) ? authorList.map((author: any) => {
       if (author.LastName && author.ForeName) {
         return `${author.LastName}, ${author.ForeName}`;
       } else if (author.CollectiveName) {
         return author.CollectiveName;
       }
       return 'Unknown Author';
-    });
+    }) : [];
     
     // Extract journal
     const journal = medlineCitation.Article?.Journal?.Title || 'Unknown Journal';
@@ -310,7 +310,10 @@ export class PubMedClient {
     
     // Extract publication types
     const publicationTypeList = medlineCitation.Article?.PublicationTypeList?.PublicationType || [];
-    const publicationType = publicationTypeList.map((type: any) => type._ || type);
+    const publicationTypes = Array.isArray(publicationTypeList) 
+      ? publicationTypeList 
+      : [publicationTypeList];
+    const publicationType = publicationTypes.map((type: any) => type._ || type);
     
     // Extract keywords
     const keywordList = medlineCitation.KeywordList?.[0]?.Keyword || [];

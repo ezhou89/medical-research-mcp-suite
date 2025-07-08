@@ -9,4 +9,4 @@ cd "/Users/eugenezhou/Code/medical-research-mcp-suite"
 mkdir -p logs
 
 # Use full path to node for better compatibility and log errors
-exec /Users/eugenezhou/.nvm/versions/node/v22.16.0/bin/node dist/index.js 2>>logs/error.log
+exec /opt/homebrew/bin/node dist/index.js 2>>logs/error.log

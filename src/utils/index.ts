@@ -106,3 +106,24 @@ export {
   type SystemHealth,
   type ComponentHealth
 } from './knowledge-updater.js';
+
+// Response Size Monitoring
+export {
+  ResponseSizeMonitor,
+  checkResponseSize,
+  type SizeConfig,
+  type SizeMetrics,
+  type SizeExceededInfo
+} from './responseSizeMonitor.js';
+
+// Progressive Loading
+export {
+  ProgressiveLoader,
+  type ProgressiveLoadingConfig,
+  type ProgressiveLoadingProgress,
+  type BatchInfo,
+  type ProgressiveLoadingResult,
+  type ProgressiveLoadingError,
+  type ProgressiveLoadingResponse,
+  type DataLoader
+} from './progressiveLoader.js';
