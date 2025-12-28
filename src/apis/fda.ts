@@ -87,8 +87,9 @@ export class FDAClient {
       baseURL: this.baseURL,
       timeout: 30000,
       headers: {
-        'User-Agent': 'Medical-Research-MCP-Suite/1.0.0',
+        'User-Agent': 'Medical-Research-MCP-Suite/1.0.0 (https://github.com/medical-research-mcp; contact@example.com)',
         'Accept': 'application/json',
+        'Content-Type': 'application/json',
       },
     });
 
@@ -96,8 +97,11 @@ export class FDAClient {
     this.axios.interceptors.response.use(
       (response) => response,
       (error) => {
-        // FDA API error occurred
-        throw new Error(`FDA API Error: ${error.response?.status || 'Unknown'}`);
+        const status = error.response?.status || 'Unknown';
+        const statusText = error.response?.statusText || '';
+        const errorData = error.response?.data?.error;
+        const message = errorData?.message || errorData?.code || error.message || 'Unknown error';
+        throw new Error(`FDA API Error: ${status} ${statusText} - ${message}`);
       }
     );
   }

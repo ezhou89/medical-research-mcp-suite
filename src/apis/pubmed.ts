@@ -46,8 +46,9 @@ export class PubMedClient {
       baseURL: this.baseURL,
       timeout: 30000,
       headers: {
-        'User-Agent': 'Medical-Research-MCP-Suite/1.0.0',
-        'Accept': 'application/json',
+        'User-Agent': 'Medical-Research-MCP-Suite/1.0.0 (https://github.com/medical-research-mcp; contact@example.com)',
+        // Accept both JSON (for esearch) and XML (for efetch)
+        'Accept': 'application/json, application/xml, text/xml',
       },
     });
 
@@ -55,8 +56,10 @@ export class PubMedClient {
     this.axios.interceptors.response.use(
       (response) => response,
       (error) => {
-        // Log error to file only, not stdout (MCP protocol compliance)
-        throw new Error(`PubMed API Error: ${error.response?.status || 'Unknown'}`);
+        const status = error.response?.status || 'Unknown';
+        const statusText = error.response?.statusText || '';
+        const message = error.response?.data?.error || error.message || 'Unknown error';
+        throw new Error(`PubMed API Error: ${status} ${statusText} - ${message}`);
       }
     );
   }

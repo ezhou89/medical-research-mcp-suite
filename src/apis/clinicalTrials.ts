@@ -138,8 +138,9 @@ export class ClinicalTrialsClient {
       baseURL: this.baseURL,
       timeout: 30000,
       headers: {
-        'User-Agent': 'Medical-Research-MCP-Suite/1.0.0',
+        'User-Agent': 'Medical-Research-MCP-Suite/1.0.0 (https://github.com/medical-research-mcp; contact@example.com)',
         'Accept': 'application/json',
+        'Content-Type': 'application/json',
       },
     });
 
@@ -147,8 +148,10 @@ export class ClinicalTrialsClient {
     this.axios.interceptors.response.use(
       (response) => response,
       (error) => {
-        // ClinicalTrials API error occurred
-        throw new Error(`ClinicalTrials API Error: ${error.response?.status || 'Unknown'}`);
+        const status = error.response?.status || 'Unknown';
+        const statusText = error.response?.statusText || '';
+        const message = error.response?.data?.message || error.message || 'Unknown error';
+        throw new Error(`ClinicalTrials API Error: ${status} ${statusText} - ${message}`);
       }
     );
   }
