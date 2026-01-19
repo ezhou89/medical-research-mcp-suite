@@ -142,9 +142,6 @@ const safety = await drugSafetyProfile({
 
 ### Environment Setup
 ```bash
-# Optional - APIs work without keys but with rate limits
-PUBMED_API_KEY=your_pubmed_api_key_here
-FDA_API_KEY=your_fda_api_key_here
 
 # Performance tuning
 CACHE_TTL=3600000
